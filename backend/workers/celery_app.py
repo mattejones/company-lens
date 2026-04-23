@@ -5,6 +5,7 @@ celery_app = Celery(
     "company_lens",
     broker=settings.redis_url,
     backend=settings.redis_url,
+    include=["workers.tasks.pipeline"],
 )
 
 celery_app.conf.update(
@@ -12,4 +13,5 @@ celery_app.conf.update(
     result_serializer="json",
     accept_content=["json"],
     timezone="UTC",
+    broker_connection_retry_on_startup=True,
 )

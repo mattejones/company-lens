@@ -1,0 +1,16 @@
+Given the following UK company registration data, suggest up to 5 likely domain names.
+
+Company name: {{ company_name }}
+Status: {{ status }}
+Type: {{ company_type }}
+Incorporated: {{ date_of_creation }}
+SIC codes (industry): {{ sic_codes }}
+Location: {{ location }}
+
+Consider common domain patterns:
+- Direct name mappings (e.g. acme.co.uk, acme.com)
+- Abbreviated or shortened versions of the name
+- Industry-relevant TLDs (.io, .co.uk, .com)
+- Removing common suffixes (Ltd, PLC, Group, Holdings)
+
+Return candidates ranked by confidence, most likely first.

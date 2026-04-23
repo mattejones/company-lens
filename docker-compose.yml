@@ -32,10 +32,14 @@ services:
     ports:
       - "8000:8000"
     environment:
+      PYTHONPATH: /app
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/company_lens
       REDIS_URL: redis://redis:6379/0
       CH_API_KEY: ${CH_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,10 +59,14 @@ services:
       dockerfile: Dockerfile
     command: celery -A workers.celery_app worker --loglevel=info
     environment:
+      PYTHONPATH: /app
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/company_lens
       REDIS_URL: redis://redis:6379/0
       CH_API_KEY: ${CH_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
     depends_on:
       postgres:
         condition: service_healthy
