@@ -1,0 +1,34 @@
+# API
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Queue
+celery==5.4.0
+redis==5.1.0
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.13.3
+psycopg2-binary==2.9.10
+
+# HTTP
+httpx==0.27.2
+
+# LLM
+openai>=1.52.0
+instructor>=1.7.2
+
+# DNS / WHOIS
+dnspython==2.7.0
+python-whois==0.9.5
+
+# Web scraping + fuzzy matching
+beautifulsoup4==4.12.3
+rapidfuzz==3.10.0
+
+# Config
+pydantic-settings==2.5.2
+
+# Dev
+pytest==8.3.3
+pytest-asyncio==0.24.0
