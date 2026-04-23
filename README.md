@@ -38,7 +38,7 @@ The resulting dataset links structured company data to real-world web presence, 
 ### Setup
 
 ```bash
-git clone https://github.com/your-username/company-lens.git
+git clone https://github.com/mattejones/company-lens.git
 cd company-lens
 cp .env.example .env
 # Fill in your API keys in .env
