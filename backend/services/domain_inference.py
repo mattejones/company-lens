@@ -22,11 +22,6 @@ class DomainInferenceResult(BaseModel):
 # --- Client factory ---
 
 def _build_client() -> instructor.Instructor:
-    """Build an instructor-wrapped client from config.
-
-    Both OpenAI and Ollama use the same OpenAI-compatible client —
-    switching provider is purely a config change.
-    """
     openai_client = openai.AsyncOpenAI(
         api_key=settings.openai_api_key if settings.llm_provider == "openai" else "ollama",
         base_url=settings.llm_base_url,
@@ -41,11 +36,13 @@ class DomainInferenceService:
 
     def __init__(self):
         self._client = _build_client()
+        self.last_prompts: dict = {}
 
     async def infer(self, company_data: dict) -> DomainInferenceResult:
-        """Generate ranked domain candidates from a CH company profile."""
         system_prompt = render_prompt("domain_inference_system.j2")
         user_prompt = render_prompt("domain_inference_user.j2", **_extract_context(company_data))
+
+        self.last_prompts = {"system": system_prompt, "user": user_prompt}
 
         return await self._client.chat.completions.create(
             model=settings.llm_model,

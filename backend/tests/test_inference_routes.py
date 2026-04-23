@@ -22,21 +22,20 @@ MOCK_JOB_METADATA = {
     "created_at": "2024-01-01T00:00:00+00:00",
 }
 
+FIXED_UUID = "test-job-123"
 
-def _mock_chain(job_id: str):
-    """Build a mock Celery chain that returns a predictable job ID."""
-    mock_result = MagicMock()
-    mock_result.id = job_id
+
+def _mock_chain():
     mock_chain = MagicMock()
-    mock_chain.apply_async.return_value = mock_result
+    mock_chain.apply_async.return_value = MagicMock()
     return mock_chain
 
 
 @pytest.mark.asyncio
 async def test_post_infer_returns_job_id():
-    with patch("api.routes.inference.chain") as mock_chain_cls, \
-         patch("api.routes.inference.register_job"):
-        mock_chain_cls.return_value = _mock_chain("test-job-123")
+    with patch("api.routes.inference.chain", return_value=_mock_chain()), \
+         patch("api.routes.inference.register_job"), \
+         patch("api.routes.inference.uuid.uuid4", return_value=FIXED_UUID):
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -44,14 +43,14 @@ async def test_post_infer_returns_job_id():
             response = await client.post("/infer", json=MOCK_COMPANY)
 
         assert response.status_code == 200
-        assert response.json()["job_id"] == "test-job-123"
+        assert response.json()["job_id"] == FIXED_UUID
 
 
 @pytest.mark.asyncio
 async def test_fetch_and_infer_returns_job_id():
-    with patch("api.routes.inference.chain") as mock_chain_cls, \
-         patch("api.routes.inference.register_job"):
-        mock_chain_cls.return_value = _mock_chain("test-job-456")
+    with patch("api.routes.inference.chain", return_value=_mock_chain()), \
+         patch("api.routes.inference.register_job"), \
+         patch("api.routes.inference.uuid.uuid4", return_value=FIXED_UUID):
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -59,7 +58,7 @@ async def test_fetch_and_infer_returns_job_id():
             response = await client.get("/companies/09446231/infer")
 
         assert response.status_code == 200
-        assert response.json()["job_id"] == "test-job-456"
+        assert response.json()["job_id"] == FIXED_UUID
 
 
 @pytest.mark.asyncio
