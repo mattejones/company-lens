@@ -1,6 +1,11 @@
 from celery import chain
 from fastapi import APIRouter, HTTPException
-from workers.tasks.pipeline import fetch_company_task, infer_domains_task, verify_domains_task
+from workers.tasks.pipeline import (
+    fetch_company_task,
+    infer_domains_task,
+    verify_domains_task,
+    rank_domains_task,
+)
 from utils.job_registry import register_job
 
 router = APIRouter(tags=["inference"])
@@ -8,14 +13,12 @@ router = APIRouter(tags=["inference"])
 
 @router.post("/infer")
 async def infer_domains(company_data: dict) -> dict:
-    """Dispatch inference + verification pipeline for pre-fetched CH data.
-
-    Returns a job ID immediately — poll /jobs/{job_id} for results.
-    """
+    """Dispatch inference + verification + ranking pipeline for pre-fetched CH data."""
     try:
         job = chain(
             infer_domains_task.s(company_data),
             verify_domains_task.s(),
+            rank_domains_task.s(),
         ).apply_async()
         register_job(job.id, {
             "type": "infer",
@@ -28,15 +31,13 @@ async def infer_domains(company_data: dict) -> dict:
 
 @router.get("/companies/{company_number}/infer")
 async def fetch_and_infer(company_number: str) -> dict:
-    """Convenience wrapper — chains CH fetch, inference, and verification.
-
-    Returns a job ID immediately — poll /jobs/{job_id} for results.
-    """
+    """Convenience wrapper — chains CH fetch, inference, verification, and ranking."""
     try:
         job = chain(
             fetch_company_task.s(company_number),
             infer_domains_task.s(),
             verify_domains_task.s(),
+            rank_domains_task.s(),
         ).apply_async()
         register_job(job.id, {
             "type": "fetch_and_infer",
