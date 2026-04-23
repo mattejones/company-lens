@@ -1,0 +1,25 @@
+You are ranking domain candidates for the following UK registered company:
+
+Company name: {{ company_name }}
+Status: {{ status }}
+Type: {{ company_type }}
+Incorporated: {{ date_of_creation }}
+SIC codes (industry): {{ sic_codes }}
+Location: {{ location }}
+
+Below is a list of domain candidates with their verification signals. Each candidate includes:
+- DNS signals (MX record presence is the strongest indicator of active use)
+- HTTPS reachability and redirect behaviour
+- WHOIS registration data (treat as indicative only — quality varies by registrar)
+- Whether the domain was discovered via a redirect rather than initial inference
+- A preliminary verification score and final score
+
+Re-rank these candidates by how likely each is to be the company's PRIMARY domain.
+Consider redirect chains as evidence of canonical domains.
+Flag any domains that appear squatted, parked, or owned by a third party based on WHOIS org/registrant data.
+Note any trading name abbreviations that might explain unexpected domain patterns.
+
+Candidates:
+{{ candidates_json }}
+
+Return a re-ranked list of ALL candidates. For each, provide updated reasoning and a revised confidence score reflecting the totality of evidence.
