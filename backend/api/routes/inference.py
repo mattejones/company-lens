@@ -1,33 +1,47 @@
+from celery import chain
 from fastapi import APIRouter, HTTPException
-from services.domain_inference import DomainInferenceService, DomainInferenceResult
-from services.companies_house import CompaniesHouseClient
+from workers.tasks.pipeline import fetch_company_task, infer_domains_task, verify_domains_task
+from utils.job_registry import register_job
 
 router = APIRouter(tags=["inference"])
 
 
-@router.post("/infer", response_model=DomainInferenceResult)
-async def infer_domains(company_data: dict) -> DomainInferenceResult:
-    """Infer domain candidates from a pre-fetched CH company profile."""
+@router.post("/infer")
+async def infer_domains(company_data: dict) -> dict:
+    """Dispatch inference + verification pipeline for pre-fetched CH data.
+
+    Returns a job ID immediately — poll /jobs/{job_id} for results.
+    """
     try:
-        service = DomainInferenceService()
-        return await service.infer(company_data)
+        job = chain(
+            infer_domains_task.s(company_data),
+            verify_domains_task.s(),
+        ).apply_async()
+        register_job(job.id, {
+            "type": "infer",
+            "company_name": company_data.get("company_name", "unknown"),
+        })
+        return {"job_id": job.id}
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Inference error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to dispatch job: {str(e)}")
 
 
-@router.get("/companies/{company_number}/infer", response_model=DomainInferenceResult)
-async def fetch_and_infer(company_number: str) -> DomainInferenceResult:
-    """Convenience wrapper — fetches CH profile then runs domain inference in one call."""
-    ch_client = CompaniesHouseClient()
-    try:
-        company_data = await ch_client.get_company(company_number)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Companies House error: {str(e)}")
-    finally:
-        await ch_client.close()
+@router.get("/companies/{company_number}/infer")
+async def fetch_and_infer(company_number: str) -> dict:
+    """Convenience wrapper — chains CH fetch, inference, and verification.
 
+    Returns a job ID immediately — poll /jobs/{job_id} for results.
+    """
     try:
-        service = DomainInferenceService()
-        return await service.infer(company_data)
+        job = chain(
+            fetch_company_task.s(company_number),
+            infer_domains_task.s(),
+            verify_domains_task.s(),
+        ).apply_async()
+        register_job(job.id, {
+            "type": "fetch_and_infer",
+            "company_number": company_number,
+        })
+        return {"job_id": job.id}
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Inference error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to dispatch job: {str(e)}")

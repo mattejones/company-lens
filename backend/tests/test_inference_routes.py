@@ -1,8 +1,7 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 from api.main import app
-from services.domain_inference import DomainCandidate, DomainInferenceResult
 
 MOCK_COMPANY = {
     "company_name": "MONZO BANK LIMITED",
@@ -16,20 +15,28 @@ MOCK_COMPANY = {
     },
 }
 
-MOCK_RESULT = DomainInferenceResult(
-    candidates=[
-        DomainCandidate(domain="monzo.com", reasoning="Direct name mapping", confidence=0.95),
-        DomainCandidate(domain="monzobank.co.uk", reasoning="Full name with UK TLD", confidence=0.60),
-    ]
-)
+MOCK_JOB_METADATA = {
+    "job_id": "test-job-123",
+    "type": "fetch_and_infer",
+    "company_number": "09446231",
+    "created_at": "2024-01-01T00:00:00+00:00",
+}
+
+
+def _mock_chain(job_id: str):
+    """Build a mock Celery chain that returns a predictable job ID."""
+    mock_result = MagicMock()
+    mock_result.id = job_id
+    mock_chain = MagicMock()
+    mock_chain.apply_async.return_value = mock_result
+    return mock_chain
 
 
 @pytest.mark.asyncio
-async def test_post_infer_returns_candidates():
-    with patch("api.routes.inference.DomainInferenceService") as mock_service_cls:
-        mock_service = MagicMock()
-        mock_service.infer = AsyncMock(return_value=MOCK_RESULT)
-        mock_service_cls.return_value = mock_service
+async def test_post_infer_returns_job_id():
+    with patch("api.routes.inference.chain") as mock_chain_cls, \
+         patch("api.routes.inference.register_job"):
+        mock_chain_cls.return_value = _mock_chain("test-job-123")
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -37,30 +44,72 @@ async def test_post_infer_returns_candidates():
             response = await client.post("/infer", json=MOCK_COMPANY)
 
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["candidates"]) == 2
-        assert data["candidates"][0]["domain"] == "monzo.com"
+        assert response.json()["job_id"] == "test-job-123"
 
 
 @pytest.mark.asyncio
-async def test_fetch_and_infer_chains_services():
-    with patch("api.routes.inference.CompaniesHouseClient") as mock_ch_cls, \
-         patch("api.routes.inference.DomainInferenceService") as mock_service_cls:
-
-        mock_ch = MagicMock()
-        mock_ch.get_company = AsyncMock(return_value=MOCK_COMPANY)
-        mock_ch.close = AsyncMock()
-        mock_ch_cls.return_value = mock_ch
-
-        mock_service = MagicMock()
-        mock_service.infer = AsyncMock(return_value=MOCK_RESULT)
-        mock_service_cls.return_value = mock_service
+async def test_fetch_and_infer_returns_job_id():
+    with patch("api.routes.inference.chain") as mock_chain_cls, \
+         patch("api.routes.inference.register_job"):
+        mock_chain_cls.return_value = _mock_chain("test-job-456")
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            response = await client.get("/companies/12345678/infer")
+            response = await client.get("/companies/09446231/infer")
 
         assert response.status_code == 200
-        mock_ch.get_company.assert_called_once_with("12345678")
-        mock_service.infer.assert_called_once_with(MOCK_COMPANY)
+        assert response.json()["job_id"] == "test-job-456"
+
+
+@pytest.mark.asyncio
+async def test_job_status_success():
+    with patch("api.routes.jobs.get_job_metadata", return_value=MOCK_JOB_METADATA), \
+         patch("api.routes.jobs.AsyncResult") as mock_async_result:
+        mock_result = MagicMock()
+        mock_result.status = "SUCCESS"
+        mock_result.successful.return_value = True
+        mock_result.failed.return_value = False
+        mock_result.get.return_value = {"candidates": []}
+        mock_async_result.return_value = mock_result
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/jobs/test-job-123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "SUCCESS"
+        assert data["result"] == {"candidates": []}
+
+
+@pytest.mark.asyncio
+async def test_job_status_pending():
+    with patch("api.routes.jobs.get_job_metadata", return_value=MOCK_JOB_METADATA), \
+         patch("api.routes.jobs.AsyncResult") as mock_async_result:
+        mock_result = MagicMock()
+        mock_result.status = "PENDING"
+        mock_result.successful.return_value = False
+        mock_result.failed.return_value = False
+        mock_async_result.return_value = mock_result
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/jobs/test-job-pending")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "PENDING"
+        assert response.json()["result"] is None
+
+
+@pytest.mark.asyncio
+async def test_job_status_not_found():
+    with patch("api.routes.jobs.get_job_metadata", return_value=None):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get("/jobs/bogus-id")
+
+        assert response.status_code == 404

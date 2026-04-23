@@ -2,6 +2,7 @@ import instructor
 import openai
 from pydantic import BaseModel, Field
 from api.config import settings
+from utils.prompts import render_prompt
 
 
 # --- Output schema ---
@@ -43,56 +44,32 @@ class DomainInferenceService:
 
     async def infer(self, company_data: dict) -> DomainInferenceResult:
         """Generate ranked domain candidates from a CH company profile."""
+        system_prompt = render_prompt("domain_inference_system.j2")
+        user_prompt = render_prompt("domain_inference_user.j2", **_extract_context(company_data))
 
-        prompt = _build_prompt(company_data)
-
-        result = await self._client.chat.completions.create(
+        return await self._client.chat.completions.create(
             model=settings.llm_model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert at inferring company domain names from "
-                        "structured company registration data. You reason carefully "
-                        "about likely web presence based on company name, industry, "
-                        "and location. You never fabricate — if you are not confident, "
-                        "reflect that in your confidence score."
-                    ),
-                },
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             response_model=DomainInferenceResult,
             max_retries=2,
         )
 
-        return result
 
-
-def _build_prompt(company_data: dict) -> str:
-    """Extract the most signal-rich fields from a CH profile for the prompt."""
-
-    name = company_data.get("company_name", "Unknown")
-    status = company_data.get("company_status", "unknown")
-    company_type = company_data.get("type", "unknown")
-    created = company_data.get("date_of_creation", "unknown")
-    sic_codes = company_data.get("sic_codes", [])
+def _extract_context(company_data: dict) -> dict:
+    """Extract the most signal-rich fields from a CH profile for prompt rendering."""
     address = company_data.get("registered_office_address", {})
+    sic_codes = company_data.get("sic_codes", [])
     locality = address.get("locality", "")
     postcode = address.get("postal_code", "")
 
-    return f"""Given the following UK company registration data, suggest up to 5 likely domain names.
-
-Company name: {name}
-Status: {status}
-Type: {company_type}
-Incorporated: {created}
-SIC codes (industry): {", ".join(sic_codes) if sic_codes else "not provided"}
-Location: {", ".join(filter(None, [locality, postcode]))}
-
-Consider common domain patterns:
-- Direct name mappings (e.g. acme.co.uk, acme.com)
-- Abbreviated or shortened versions of the name
-- Industry-relevant TLDs (.io, .co.uk, .com)
-- Removing common suffixes (Ltd, PLC, Group, Holdings)
-
-Return candidates ranked by confidence, most likely first."""
+    return {
+        "company_name": company_data.get("company_name", "Unknown"),
+        "status": company_data.get("company_status", "unknown"),
+        "company_type": company_data.get("type", "unknown"),
+        "date_of_creation": company_data.get("date_of_creation", "unknown"),
+        "sic_codes": ", ".join(sic_codes) if sic_codes else "not provided",
+        "location": ", ".join(filter(None, [locality, postcode])),
+    }

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes.companies import router as companies_router
 from api.routes.inference import router as inference_router
+from api.routes.jobs import router as jobs_router
 
 app = FastAPI(
     title="Company Lens",
@@ -18,6 +19,7 @@ app.add_middleware(
 
 app.include_router(companies_router, prefix="/companies", tags=["companies"])
 app.include_router(inference_router)
+app.include_router(jobs_router)
 
 
 @app.get("/health")
