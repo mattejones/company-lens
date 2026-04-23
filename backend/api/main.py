@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from api.routes.companies import router as companies_router
 
 app = FastAPI(
     title="Company Lens",
@@ -13,6 +14,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(companies_router)
 
 
 @app.get("/health")
