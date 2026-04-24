@@ -7,10 +7,18 @@ import re
 async def fetch_content_signals(domain: str, timeout: float = 10.0) -> dict | None:
     """Fetch a domain's homepage and extract signals for fuzzy matching.
 
-    Returns title, meta description, and a sample of visible body text.
+    Attempts HTTPS first, falls back to HTTP if HTTPS fails.
+    Returns title, OG tags, meta description, and a sample of visible body text.
     Returns None if the page is unreachable or not HTML.
     """
-    url = f"https://{domain}"
+    for scheme in ("https", "http"):
+        result = await _fetch(f"{scheme}://{domain}", timeout)
+        if result is not None:
+            return result
+    return None
+
+
+async def _fetch(url: str, timeout: float) -> dict | None:
     try:
         async with httpx.AsyncClient(
             follow_redirects=True,
@@ -25,20 +33,29 @@ async def fetch_content_signals(domain: str, timeout: float = 10.0) -> dict | No
                 return None
             if response.status_code >= 400:
                 return None
+            html = response.text
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(html, "html.parser")
 
+        # Standard title
         title = soup.title.string.strip() if soup.title and soup.title.string else None
 
-        meta_desc = None
-        meta_tag = soup.find("meta", attrs={"name": "description"})
-        if meta_tag and meta_tag.get("content"):
-            meta_desc = meta_tag["content"].strip()
+        # OG title — often cleaner than <title> which may include site suffix
+        og_title = _get_meta(soup, property="og:title")
+        og_description = _get_meta(soup, property="og:description")
+
+        # Meta description
+        meta_desc = _get_meta(soup, name="description")
+
+        # Prefer OG title over standard title if present
+        effective_title = og_title or title
 
         body_text = _extract_body_text(soup)
 
         return {
-            "title": title,
+            "title": effective_title,
+            "og_title": og_title,
+            "og_description": og_description,
             "meta_description": meta_desc,
             "body_sample": body_text[:500] if body_text else None,
         }
@@ -50,7 +67,11 @@ async def fetch_content_signals(domain: str, timeout: float = 10.0) -> dict | No
 def score_content_match(company_name: str, content: dict | None) -> float | None:
     """Score how well page content matches a company name using fuzzy matching.
 
-    Uses a weighted combination of title, meta description, and body text scores.
+    Uses a weighted combination of signals. Each signal is scored using both
+    partial_ratio (substring match) and token_set_ratio (word-order agnostic),
+    taking the higher of the two — this handles cases like trading name
+    abbreviations or reversed word order in page titles.
+
     Returns None if no content was retrieved.
     """
     if not content:
@@ -59,14 +80,24 @@ def score_content_match(company_name: str, content: dict | None) -> float | None
     clean_name = _clean_company_name(company_name)
     scores = []
 
+    def best_score(text: str) -> float:
+        t = text.lower()
+        return max(
+            fuzz.partial_ratio(clean_name, t),
+            fuzz.token_set_ratio(clean_name, t),
+        )
+
     if content.get("title"):
-        scores.append((fuzz.partial_ratio(clean_name, content["title"].lower()), 0.50))
+        scores.append((best_score(content["title"]), 0.40))
+
+    if content.get("og_description"):
+        scores.append((best_score(content["og_description"]), 0.25))
 
     if content.get("meta_description"):
-        scores.append((fuzz.partial_ratio(clean_name, content["meta_description"].lower()), 0.30))
+        scores.append((best_score(content["meta_description"]), 0.20))
 
     if content.get("body_sample"):
-        scores.append((fuzz.partial_ratio(clean_name, content["body_sample"].lower()), 0.20))
+        scores.append((best_score(content["body_sample"]), 0.15))
 
     if not scores:
         return None
@@ -74,6 +105,14 @@ def score_content_match(company_name: str, content: dict | None) -> float | None
     weighted = sum(score * weight for score, weight in scores)
     total_weight = sum(weight for _, weight in scores)
     return round((weighted / total_weight) / 100.0, 4)
+
+
+def _get_meta(soup: BeautifulSoup, **attrs) -> str | None:
+    """Extract content from a meta tag by arbitrary attributes."""
+    tag = soup.find("meta", attrs=attrs)
+    if tag and tag.get("content"):
+        return tag["content"].strip()
+    return None
 
 
 def _clean_company_name(name: str) -> str:
