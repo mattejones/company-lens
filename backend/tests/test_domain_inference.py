@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from services.domain_inference import DomainInferenceService, DomainCandidate, DomainInferenceResult
 
 MOCK_COMPANY = {
@@ -23,13 +23,16 @@ MOCK_INFERENCE_RESULT = DomainInferenceResult(
 )
 
 
+def _mock_adapter(result):
+    """Build a mock LLM adapter that returns the given result."""
+    mock = MagicMock()
+    mock.complete = AsyncMock(return_value=result)
+    return mock
+
+
 @pytest.mark.asyncio
 async def test_infer_returns_candidates():
-    with patch("services.domain_inference._build_client") as mock_build:
-        mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=MOCK_INFERENCE_RESULT)
-        mock_build.return_value = mock_client
-
+    with patch("services.domain_inference.build_llm_adapter", return_value=_mock_adapter(MOCK_INFERENCE_RESULT)):
         service = DomainInferenceService()
         result = await service.infer(MOCK_COMPANY)
 
@@ -40,11 +43,7 @@ async def test_infer_returns_candidates():
 
 @pytest.mark.asyncio
 async def test_infer_candidates_ordered_by_confidence():
-    with patch("services.domain_inference._build_client") as mock_build:
-        mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=MOCK_INFERENCE_RESULT)
-        mock_build.return_value = mock_client
-
+    with patch("services.domain_inference.build_llm_adapter", return_value=_mock_adapter(MOCK_INFERENCE_RESULT)):
         service = DomainInferenceService()
         result = await service.infer(MOCK_COMPANY)
 
@@ -53,15 +52,17 @@ async def test_infer_candidates_ordered_by_confidence():
 
 
 @pytest.mark.asyncio
-async def test_infer_called_with_correct_model():
-    with patch("services.domain_inference._build_client") as mock_build:
-        mock_client = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=MOCK_INFERENCE_RESULT)
-        mock_build.return_value = mock_client
+async def test_infer_called_with_correct_prompts():
+    mock_adapter = _mock_adapter(MOCK_INFERENCE_RESULT)
 
+    with patch("services.domain_inference.build_llm_adapter", return_value=mock_adapter):
         service = DomainInferenceService()
         await service.infer(MOCK_COMPANY)
 
-        mock_client.chat.completions.create.assert_called_once()
-        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        mock_adapter.complete.assert_called_once()
+        call_kwargs = mock_adapter.complete.call_args.kwargs
         assert call_kwargs["response_model"] == DomainInferenceResult
+        assert "system_prompt" in call_kwargs
+        assert "user_prompt" in call_kwargs
+        # Verify company name appears in the rendered user prompt
+        assert "ACME TECHNOLOGIES" in call_kwargs["user_prompt"]
