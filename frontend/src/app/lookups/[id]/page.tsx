@@ -42,11 +42,8 @@ export default function LookupPage({ params }: { params: Promise<{ id: string }>
     <div className="text-center py-32 font-mono text-text-muted text-sm">Lookup not found</div>
   );
 
-  const primaryCandidate = lookup.candidates.find((c) => c.is_primary_candidate);
-
   return (
     <div className="animate-fade-in">
-      {/* Header */}
       <div className="mb-8">
         <p className="font-mono text-xs text-accent tracking-widest mb-2 uppercase">Lookup Result</p>
         <h1 className="font-display text-3xl font-700 text-text-primary mb-1">
@@ -55,15 +52,19 @@ export default function LookupPage({ params }: { params: Promise<{ id: string }>
         <p className="font-mono text-xs text-text-muted">{lookup.company?.company_number}</p>
       </div>
 
-      {/* Summary card */}
       {lookup.ranking_summary && (
         <div className="bg-bg-surface border border-accent/20 rounded p-5 mb-8 glow">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="font-mono text-xs text-text-muted mb-1">Primary domain</p>
-              <p className="font-display text-2xl font-700 text-accent">
+              <a
+                href={`https://${lookup.ranking_summary.primary_domain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-display text-2xl font-700 text-accent hover:underline"
+              >
                 {lookup.ranking_summary.primary_domain ?? "—"}
-              </p>
+              </a>
               {verified && (
                 <div className="flex items-center gap-2 mt-2">
                   <div className="status-dot success" />
@@ -80,7 +81,6 @@ export default function LookupPage({ params }: { params: Promise<{ id: string }>
         </div>
       )}
 
-      {/* Candidates */}
       <div>
         <p className="font-mono text-xs text-text-muted uppercase tracking-widest mb-4">
           {lookup.candidates.length} domain candidates
@@ -115,58 +115,72 @@ function CandidateCard({
   const [expanded, setExpanded] = useState(false);
   const score = c.final_score ?? 0;
 
+  // A domain is "unresolved" if it has no A record and no HTTPS — not the same as parked
+  const isUnresolved = c.dns_data?.a_record === false && c.https_data?.live === false && !c.dns_data?.is_parked;
+  const contentScore = c.content_data?.match_score;
+
   return (
     <div className={`bg-bg-surface border rounded transition-all ${
       isVerified ? "border-accent/40 bg-accent/5" :
       c.is_primary_candidate ? "border-accent/20" : "border-bg-border"
     }`}>
-      {/* Main row */}
       <div className="p-4 flex items-center gap-4">
-        {/* Score bar */}
+        {/* Score */}
         <div className="shrink-0 w-12 text-center">
-          <div className="text-xs font-mono font-500 text-accent">
-            {Math.round(score * 100)}
-          </div>
+          <div className="text-xs font-mono font-500 text-accent">{Math.round(score * 100)}</div>
           <div className="h-1 bg-bg-border rounded-full mt-1">
-            <div
-              className="h-1 bg-accent rounded-full transition-all"
-              style={{ width: `${score * 100}%` }}
-            />
+            <div className="h-1 bg-accent rounded-full transition-all" style={{ width: `${score * 100}%` }} />
           </div>
         </div>
 
         {/* Domain + badges */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-sm text-text-primary font-500">{c.domain}</span>
+            {/* Clickable domain link */}
+            <a
+              href={`https://${c.domain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm text-text-primary font-500 hover:text-accent transition-colors"
+            >
+              {c.domain} ↗
+            </a>
             {c.is_primary_candidate && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-accent/30 text-accent bg-accent/10">
-                primary
-              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-accent/30 text-accent bg-accent/10">primary</span>
             )}
             {c.discovered_via_redirect && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-text-muted/30 text-text-muted">
-                via redirect
-              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-text-muted/30 text-text-muted">via redirect</span>
             )}
+            {/* parked badge only from LLM verdict */}
             {c.is_squatted_or_parked && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-status-failure/30 text-status-failure bg-status-failure/10">
-                parked
-              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-status-failure/30 text-status-failure bg-status-failure/10">parked / squatted</span>
+            )}
+            {/* unresolved — separate from parked */}
+            {isUnresolved && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-text-muted/30 text-text-muted">unresolved</span>
             )}
             {isVerified && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-status-success/30 text-status-success bg-status-success/10">
-                ✓ verified
-              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-status-success/30 text-status-success bg-status-success/10">✓ verified</span>
             )}
           </div>
 
           {/* Signal pills */}
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
             <Signal label="MX" value={c.dns_data?.mx_record} />
-            <Signal label="A" value={c.dns_data?.a_record} />
+            <Signal label="A record" value={c.dns_data?.a_record} />
             <Signal label="HTTPS" value={c.https_data?.live} />
-            <Signal label="Parked" value={c.dns_data?.is_parked} invert />
+            {/* Parked as a signal — shown as negative when true */}
+            {c.dns_data?.is_parked !== undefined && (
+              <span className={`font-mono text-[10px] ${c.dns_data.is_parked ? "text-status-failure" : "text-text-muted"}`}>
+                {c.dns_data.is_parked ? "Parked NS" : "Clean NS"}
+              </span>
+            )}
+            {/* Content match score */}
+            {contentScore !== undefined && contentScore !== null && (
+              <span className={`font-mono text-[10px] ${contentScore > 0.6 ? "text-status-success" : contentScore > 0.3 ? "text-status-pending" : "text-text-muted"}`}>
+                Content {Math.round(contentScore * 100)}%
+              </span>
+            )}
           </div>
         </div>
 
@@ -190,22 +204,43 @@ function CandidateCard({
         </div>
       </div>
 
-      {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-bg-border px-4 pb-4 pt-3 grid grid-cols-2 md:grid-cols-4 gap-4">
           <DetailBlock label="LLM confidence" value={`${Math.round((c.llm_confidence ?? 0) * 100)}%`} />
-          <DetailBlock label="Verification" value={`${Math.round((c.verification_score ?? 0) * 100)}%`} />
+          <DetailBlock label="Verification score" value={`${Math.round((c.verification_score ?? 0) * 100)}%`} />
           <DetailBlock label="SSL org" value={c.ssl_data?.org ?? "—"} />
           <DetailBlock label="Registrar" value={c.whois_data?.registrar ?? "—"} />
+          {c.whois_data?.creation_date && (
+            <DetailBlock label="Domain created" value={String(c.whois_data.creation_date).split("T")[0]} />
+          )}
           {c.https_data?.redirect_domain && (
             <DetailBlock label="Redirects to" value={c.https_data.redirect_domain} />
+          )}
+          {c.ssl_data?.sans && c.ssl_data.sans.length > 0 && (
+            <div className="col-span-2">
+              <p className="font-mono text-[10px] text-text-muted mb-1">SSL SANs</p>
+              <div className="flex flex-wrap gap-1">
+                {c.ssl_data.sans.map((san) => (
+                  <span key={san} className="font-mono text-[10px] px-1.5 py-0.5 bg-bg-elevated border border-bg-border rounded text-text-secondary">{san}</span>
+                ))}
+              </div>
+            </div>
           )}
           {c.content_data?.signals?.title && (
             <DetailBlock label="Page title" value={c.content_data.signals.title} className="col-span-2" />
           )}
+          {contentScore !== undefined && contentScore !== null && (
+            <DetailBlock label="Content match score" value={`${Math.round(contentScore * 100)}%`} />
+          )}
+          {c.llm_reasoning && (
+            <div className="col-span-2 md:col-span-4">
+              <p className="font-mono text-[10px] text-text-muted mb-1">LLM reasoning</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{c.llm_reasoning}</p>
+            </div>
+          )}
           {c.ranking_reasoning && (
             <div className="col-span-2 md:col-span-4">
-              <p className="font-mono text-xs text-text-muted mb-1">Ranking reasoning</p>
+              <p className="font-mono text-[10px] text-text-muted mb-1">Ranking reasoning</p>
               <p className="text-xs text-text-secondary leading-relaxed">{c.ranking_reasoning}</p>
             </div>
           )}
@@ -215,11 +250,10 @@ function CandidateCard({
   );
 }
 
-function Signal({ label, value, invert }: { label: string; value?: boolean; invert?: boolean }) {
-  const active = invert ? !value : value;
+function Signal({ label, value }: { label: string; value?: boolean }) {
   if (value === undefined || value === null) return null;
   return (
-    <span className={`font-mono text-[10px] ${active ? "text-status-success" : "text-text-muted"}`}>
+    <span className={`font-mono text-[10px] ${value ? "text-status-success" : "text-text-muted"}`}>
       {label}
     </span>
   );

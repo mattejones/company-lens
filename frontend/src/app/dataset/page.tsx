@@ -35,7 +35,9 @@ export default function DatasetPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-16"><div className="w-5 h-5 border border-accent/40 border-t-accent rounded-full animate-spin mx-auto" /></div>
+        <div className="text-center py-16">
+          <div className="w-5 h-5 border border-accent/40 border-t-accent rounded-full animate-spin mx-auto" />
+        </div>
       ) : lookups.length === 0 ? (
         <div className="border border-dashed border-bg-border rounded p-16 text-center">
           <p className="font-mono text-xs text-text-muted">
@@ -59,6 +61,7 @@ function LookupRow({ lookup: l }: { lookup: LookupSummary }) {
     <div className="bg-bg-surface border border-bg-border rounded hover:border-accent/20 transition-all">
       <div className="p-4 flex items-start gap-4">
         <div className="min-w-0 flex-1">
+          {/* Status + badges row */}
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <div className={`status-dot ${l.status === "success" ? "success" : l.status === "failure" ? "failure" : "pending"}`} />
             <span className="font-mono text-[10px] text-text-muted">{l.status}</span>
@@ -68,12 +71,27 @@ function LookupRow({ lookup: l }: { lookup: LookupSummary }) {
               </span>
             )}
           </div>
+
+          {/* Company name */}
           <p className="font-display font-500 text-text-primary text-sm">{l.company_name ?? "—"}</p>
+
+          {/* Primary domain — always visible when present */}
+          {l.primary_domain ? (
+            <a
+              href={`https://${l.primary_domain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm text-accent hover:underline mt-0.5 inline-block"
+            >
+              {l.primary_domain} ↗
+            </a>
+          ) : l.status === "success" ? (
+            <span className="font-mono text-xs text-text-muted mt-0.5 inline-block">No domain identified</span>
+          ) : null}
+
+          {/* Meta row */}
           <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
             <span className="font-mono text-[10px] text-text-muted">{l.company_number}</span>
-            {l.primary_domain && (
-              <span className="font-mono text-[10px] text-accent">{l.primary_domain}</span>
-            )}
             {l.completed_at && (
               <span className="font-mono text-[10px] text-text-muted">{new Date(l.completed_at).toLocaleString()}</span>
             )}
@@ -82,13 +100,17 @@ function LookupRow({ lookup: l }: { lookup: LookupSummary }) {
         </div>
 
         <div className="shrink-0 flex items-center gap-2 pt-0.5">
-          <button onClick={() => setExpanded((e) => !e)}
-            className="px-3 py-1.5 text-xs font-mono text-text-muted border border-bg-border hover:border-accent/30 hover:text-text-secondary rounded transition-all">
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            className="px-3 py-1.5 text-xs font-mono text-text-muted border border-bg-border hover:border-accent/30 hover:text-text-secondary rounded transition-all"
+          >
             {expanded ? "Less ▲" : "Raw ▼"}
           </button>
           {l.status === "success" && (
-            <Link href={`/lookups/${l.lookup_id}`}
-              className="px-4 py-2 border border-accent/30 text-accent text-xs font-mono rounded hover:bg-accent/10 transition-all">
+            <Link
+              href={`/lookups/${l.lookup_id}`}
+              className="px-4 py-2 border border-accent/30 text-accent text-xs font-mono rounded hover:bg-accent/10 transition-all"
+            >
               Detail →
             </Link>
           )}
