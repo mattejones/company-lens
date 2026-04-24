@@ -7,10 +7,22 @@ Incorporated: {{ date_of_creation }}
 SIC codes (industry): {{ sic_codes }}
 Location: {{ location }}
 
-Consider common domain patterns:
-- Direct name mappings (e.g. acme.co.uk, acme.com)
-- Abbreviated or shortened versions of the name
-- Industry-relevant TLDs (.io, .co.uk, .com)
-- Removing common suffixes (Ltd, PLC, Group, Holdings)
+Step 1 — Classify the company:
+- Is this a UK subsidiary of a well-known international brand? (Look for "UK", "EUROPE", "INTERNATIONAL" in the name, or a globally recognisable brand name)
+- Is this a purely local UK business?
+- Is this a holding company or parent group?
+
+Step 2 — Generate candidates based on your classification:
+- International brand: include the parent company global domain (e.g. .com) as your highest confidence candidate
+- Local UK business: prioritise .co.uk and .com variants
+- Consider trading name abbreviations — "BUILDERS WAREHOUSE" → bw, "UNITED KINGDOM" → uk
+- Remove suffixes: Ltd, PLC, Group, Holdings, UK, International, Europe, Limited
+- Consider short versions of the name, initials, and common abbreviations
+
+Step 3 — Assign confidence:
+- 0.9+ only if you are highly confident (well-known brand, obvious domain)
+- 0.5-0.8 for reasonable guesses
+- Below 0.5 for speculative candidates
 
 Return candidates ranked by confidence, most likely first.
+All domains must include a valid TLD (.com, .co.uk, .io, .org, etc.)

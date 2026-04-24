@@ -19,13 +19,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# NOTE: All routers define their own prefix internally.
-# Do NOT add a prefix here — it will double up and break routing.
-# companies  → /companies
-# inference  → /companies/{number}/infer, /infer
-# jobs       → /jobs
-# lookups    → /lookups
-# dataset    → /dataset
+# IMPORTANT: All routers define their own prefix internally.
+# Do NOT pass prefix= here — it will double up and cause 404s.
+# companies  → /companies (defined in companies.py)
+# inference  → /companies/{number}/infer, /infer (defined in inference.py)
+# jobs       → /jobs (defined in jobs.py)
+# lookups    → /lookups (defined in lookups.py)
+# dataset    → /dataset (defined in dataset.py)
 app.include_router(companies_router)
 app.include_router(inference_router)
 app.include_router(jobs_router)
