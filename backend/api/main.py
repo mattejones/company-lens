@@ -19,7 +19,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(companies_router, prefix="/companies", tags=["companies"])
+# companies_router already carries prefix="/companies" internally
+app.include_router(companies_router)
 app.include_router(inference_router)
 app.include_router(jobs_router)
 app.include_router(lookups_router)
