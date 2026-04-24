@@ -14,10 +14,10 @@ async def list_jobs(limit: int = 50) -> list[dict]:
     for job_id in job_ids:
         metadata = get_job_metadata(job_id)
         result = AsyncResult(job_id, app=celery_app)
-        entry = {**metadata, "status": result.status, "lookup_id": None}
+        entry = {**metadata, "status": result.status}
         if result.successful():
             raw = result.get()
-            entry["lookup_id"] = raw.get("lookup_id") if isinstance(raw, dict) else None
+            entry["lookup_id"] = raw.get("lookup_id")
         jobs.append(entry)
     return jobs
 
@@ -40,7 +40,7 @@ async def get_job_status(job_id: str) -> dict:
 
     if result.successful():
         raw = result.get()
-        response["lookup_id"] = raw.get("lookup_id") if isinstance(raw, dict) else None
+        response["lookup_id"] = raw.get("lookup_id")
     elif result.failed():
         response["error"] = str(result.result)
 

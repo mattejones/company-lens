@@ -61,7 +61,7 @@ def get_company(company_number: str, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/companies/{company_number}/best")
 def get_best_domain(company_number: str, db: Session = Depends(get_db)) -> dict:
-    """Return the highest confidence primary domain across all lookups.
+    """Return the highest confidence primary domain across all lookups for a company.
 
     Prefers human-verified results over automated ranking.
     """
@@ -69,6 +69,7 @@ def get_best_domain(company_number: str, db: Session = Depends(get_db)) -> dict:
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
+    # Check for a human-verified result first
     verified_lookup = (
         db.query(Lookup)
         .filter_by(company_id=company.id, verified_by="human")
@@ -89,6 +90,7 @@ def get_best_domain(company_number: str, db: Session = Depends(get_db)) -> dict:
                 "final_score": candidate.final_score,
             }
 
+    # Fall back to highest-scoring primary candidate across all successful lookups
     best = (
         db.query(DomainCandidate)
         .join(Lookup, DomainCandidate.lookup_id == Lookup.id)
@@ -111,14 +113,4 @@ def get_best_domain(company_number: str, db: Session = Depends(get_db)) -> dict:
         "source": "automated_ranking",
         "final_score": best.final_score,
         "ranking_confidence": best.ranking_confidence,
-    }
-
-
-def _summarise_company(company: Company, db: Session) -> dict:
-    lookup_count = db.query(Lookup).filter_by(company_id=company.id).count()
-    return {
-        "company_number": company.company_number,
-        "company_name": company.company_name,
-        "company_status": company.company_status,
-        "lookup_count": lookup_count,
     }

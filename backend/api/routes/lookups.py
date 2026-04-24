@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from db.session import get_db
-from db.models import Lookup, DomainCandidate, RankingSummary, Company
+from db.models import Lookup, DomainCandidate, RankingSummary, Company, ChSnapshot, InferenceResult
 
 router = APIRouter(prefix="/lookups", tags=["lookups"])
 
@@ -79,7 +79,10 @@ def verify_lookup(
     payload: dict,
     db: Session = Depends(get_db),
 ) -> dict:
-    """Set the ground truth verified domain for a lookup."""
+    """Set the ground truth verified domain for a lookup.
+
+    Expects: {"domain": "monzo.com", "verified_by": "human"}
+    """
     lookup = db.query(Lookup).filter_by(id=lookup_id).first()
     if not lookup:
         raise HTTPException(status_code=404, detail="Lookup not found")
@@ -111,6 +114,8 @@ def verify_lookup(
         "verified_at": lookup.verified_at,
     }
 
+
+# --- Helpers ---
 
 def _summarise_lookup(lookup: Lookup, db: Session) -> dict:
     company = db.query(Company).filter_by(id=lookup.company_id).first()
