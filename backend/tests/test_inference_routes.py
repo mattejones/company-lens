@@ -31,15 +31,15 @@ def _mock_chain():
     return mock_chain
 
 
+# --- Inference dispatch ---
+
 @pytest.mark.asyncio
 async def test_post_infer_returns_job_id():
     with patch("api.routes.inference.chain", return_value=_mock_chain()), \
          patch("api.routes.inference.register_job"), \
          patch("api.routes.inference.uuid.uuid4", return_value=FIXED_UUID):
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/infer", json=MOCK_COMPANY)
 
         assert response.status_code == 200
@@ -52,39 +52,37 @@ async def test_fetch_and_infer_returns_job_id():
          patch("api.routes.inference.register_job"), \
          patch("api.routes.inference.uuid.uuid4", return_value=FIXED_UUID):
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/companies/09446231/infer")
 
         assert response.status_code == 200
         assert response.json()["job_id"] == FIXED_UUID
 
 
+# --- Job status ---
+
 @pytest.mark.asyncio
-async def test_job_status_success():
+async def test_job_status_success_returns_lookup_id():
     with patch("api.routes.jobs.get_job_metadata", return_value=MOCK_JOB_METADATA), \
          patch("api.routes.jobs.AsyncResult") as mock_async_result:
         mock_result = MagicMock()
         mock_result.status = "SUCCESS"
         mock_result.successful.return_value = True
         mock_result.failed.return_value = False
-        mock_result.get.return_value = {"candidates": []}
+        mock_result.get.return_value = {"persisted": True, "lookup_id": "abc-123"}
         mock_async_result.return_value = mock_result
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/jobs/test-job-123")
 
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "SUCCESS"
-        assert data["result"] == {"candidates": []}
+        assert data["lookup_id"] == "abc-123"
 
 
 @pytest.mark.asyncio
-async def test_job_status_pending():
+async def test_job_status_pending_has_no_lookup_id():
     with patch("api.routes.jobs.get_job_metadata", return_value=MOCK_JOB_METADATA), \
          patch("api.routes.jobs.AsyncResult") as mock_async_result:
         mock_result = MagicMock()
@@ -93,22 +91,58 @@ async def test_job_status_pending():
         mock_result.failed.return_value = False
         mock_async_result.return_value = mock_result
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/jobs/test-job-pending")
 
         assert response.status_code == 200
-        assert response.json()["status"] == "PENDING"
-        assert response.json()["result"] is None
+        data = response.json()
+        assert data["status"] == "PENDING"
+        assert data["lookup_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_job_status_failure_returns_error():
+    with patch("api.routes.jobs.get_job_metadata", return_value=MOCK_JOB_METADATA), \
+         patch("api.routes.jobs.AsyncResult") as mock_async_result:
+        mock_result = MagicMock()
+        mock_result.status = "FAILURE"
+        mock_result.successful.return_value = False
+        mock_result.failed.return_value = True
+        mock_result.result = Exception("something went wrong")
+        mock_async_result.return_value = mock_result
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/jobs/test-job-123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "FAILURE"
+        assert data["error"] is not None
 
 
 @pytest.mark.asyncio
 async def test_job_status_not_found():
     with patch("api.routes.jobs.get_job_metadata", return_value=None):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/jobs/bogus-id")
 
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_returns_list():
+    with patch("api.routes.jobs.list_job_ids", return_value=["test-job-123"]), \
+         patch("api.routes.jobs.get_job_metadata", return_value=MOCK_JOB_METADATA), \
+         patch("api.routes.jobs.AsyncResult") as mock_async_result:
+        mock_result = MagicMock()
+        mock_result.status = "SUCCESS"
+        mock_result.successful.return_value = True
+        mock_result.get.return_value = {"persisted": True, "lookup_id": "abc-123"}
+        mock_async_result.return_value = mock_result
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/jobs")
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+        assert response.json()[0]["lookup_id"] == "abc-123"

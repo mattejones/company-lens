@@ -1,7 +1,5 @@
-import instructor
-import openai
 from pydantic import BaseModel, Field
-from api.config import settings
+from services.llm import build_llm_adapter, LLMAdapter
 from utils.prompts import render_prompt
 
 
@@ -19,23 +17,11 @@ class DomainInferenceResult(BaseModel):
     )
 
 
-# --- Client factory ---
-
-def _build_client() -> instructor.Instructor:
-    openai_client = openai.AsyncOpenAI(
-        api_key=settings.openai_api_key if settings.llm_provider == "openai" else "ollama",
-        base_url=settings.llm_base_url,
-    )
-    return instructor.from_openai(openai_client)
-
-
-# --- Service ---
-
 class DomainInferenceService:
     """Infer likely domain names for a given Companies House company profile."""
 
     def __init__(self):
-        self._client = _build_client()
+        self._llm: LLMAdapter = build_llm_adapter()
         self.last_prompts: dict = {}
 
     async def infer(self, company_data: dict) -> DomainInferenceResult:
@@ -44,14 +30,10 @@ class DomainInferenceService:
 
         self.last_prompts = {"system": system_prompt, "user": user_prompt}
 
-        return await self._client.chat.completions.create(
-            model=settings.llm_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+        return await self._llm.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             response_model=DomainInferenceResult,
-            max_retries=2,
         )
 
 
