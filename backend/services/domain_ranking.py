@@ -1,8 +1,6 @@
 import json
-import instructor
-import openai
 from pydantic import BaseModel, Field
-from api.config import settings
+from services.llm import build_llm_adapter, LLMAdapter
 from utils.prompts import render_prompt
 from services.domain_inference import _extract_context
 
@@ -22,19 +20,11 @@ class DomainRankingResult(BaseModel):
     summary: str = Field(description="Brief summary of ranking rationale and key signals used")
 
 
-def _build_client() -> instructor.Instructor:
-    openai_client = openai.AsyncOpenAI(
-        api_key=settings.openai_api_key if settings.llm_provider == "openai" else "ollama",
-        base_url=settings.llm_base_url,
-    )
-    return instructor.from_openai(openai_client)
-
-
 class DomainRankingService:
     """Stage 2 LLM — re-ranks verified domain candidates using structured evidence."""
 
     def __init__(self):
-        self._client = _build_client()
+        self._llm: LLMAdapter = build_llm_adapter()
 
     async def rank(self, company_data: dict, verification_result: dict) -> DomainRankingResult:
         context = _extract_context(company_data)
@@ -51,23 +41,14 @@ class DomainRankingService:
             **context,
         )
 
-        return await self._client.chat.completions.create(
-            model=settings.llm_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+        return await self._llm.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             response_model=DomainRankingResult,
-            max_retries=2,
         )
 
 
 def _summarise_candidate(c: dict) -> dict:
-    """Build a clean structured summary of a candidate for the ranking LLM.
-
-    Passes all meaningful signals without overwhelming the context window
-    with raw WHOIS blobs or full page content.
-    """
     whois = c.get("whois_data") or {}
     ssl = c.get("ssl_info") or {}
     content = c.get("content_signals") or {}
@@ -91,7 +72,6 @@ def _summarise_candidate(c: dict) -> dict:
             "common_name": ssl.get("common_name"),
             "sans": ssl.get("sans", []),
             "issuer": ssl.get("issuer"),
-            "expires": ssl.get("not_after"),
         },
         "whois": {
             "registered": c.get("whois_registered"),
@@ -101,7 +81,6 @@ def _summarise_candidate(c: dict) -> dict:
             "country": whois.get("country"),
             "creation_date": whois.get("creation_date"),
             "expiration_date": whois.get("expiration_date"),
-            "emails": whois.get("emails"),
         },
         "content": {
             "title": content.get("title"),

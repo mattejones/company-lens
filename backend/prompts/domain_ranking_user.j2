@@ -7,19 +7,25 @@ Incorporated: {{ date_of_creation }}
 SIC codes (industry): {{ sic_codes }}
 Location: {{ location }}
 
-Below is a list of domain candidates with their verification signals. Each candidate includes:
-- DNS signals (MX record presence is the strongest indicator of active use)
-- HTTPS reachability and redirect behaviour
-- WHOIS registration data (treat as indicative only — quality varies by registrar)
-- Whether the domain was discovered via a redirect rather than initial inference
-- A preliminary verification score and final score
+First, classify the company:
+- International brand with UK subsidiary? The parent global domain (.com) is likely the primary.
+- Local UK business? A .co.uk or .com domain operated by the company is likely primary.
+- Holding/parent company? May share a domain with a trading subsidiary.
 
-Re-rank these candidates by how likely each is to be the company's PRIMARY domain.
-Consider redirect chains as evidence of canonical domains.
-Flag any domains that appear squatted, parked, or owned by a third party based on WHOIS org/registrant data.
-Note any trading name abbreviations that might explain unexpected domain patterns.
+Then evaluate each candidate using these signals (in order of importance):
+1. MX record present → domain is used for email → strong positive
+2. A record + HTTPS live + no redirect → likely primary domain
+3. Redirects to another candidate → that candidate is more likely the primary
+4. WHOIS org matches company name → positive
+5. Parked nameservers → domain is for sale, not the company's → strong negative
+6. Discovered via redirect → consider carefully, may be the real domain
+
+For each candidate, explain your reasoning in 1-2 sentences. Be specific about which signals influenced your decision.
+
+Set is_primary_candidate=true for exactly ONE domain — the most likely primary web presence.
+Set is_squatted_or_parked=true if WHOIS or nameserver evidence suggests third-party ownership.
 
 Candidates:
 {{ candidates_json }}
 
-Return a re-ranked list of ALL candidates. For each, provide updated reasoning and a revised confidence score reflecting the totality of evidence.
+Return ALL candidates re-ranked by confidence. Most likely primary domain first.
